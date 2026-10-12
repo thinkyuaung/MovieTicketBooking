@@ -1,0 +1,209 @@
+// movieTicket database schema. Keep in sync with docs/er-diagram.md.
+// All prices are whole kyat (MMK), stored as INT UNSIGNED.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  user
+  admin
+}
+
+enum AgeRating {
+  G
+  PG
+  PG13
+  R
+}
+
+enum SeatType {
+  standard
+  vip
+  couple
+  wheelchair
+}
+
+enum ShowtimeStatus {
+  scheduled
+  cancelled
+}
+
+enum BookingStatus {
+  confirmed
+  cancelled
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  name         String   @db.VarChar(100)
+  email        String   @unique @db.VarChar(191)
+  phone        String?  @db.VarChar(30)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  role         Role     @default(user)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  bookings Booking[]
+  reviews  Review[]
+
+  @@map("users")
+}
+
+model Movie {
+  id          Int       @id @default(autoincrement())
+  title       String    @db.VarChar(200)
+  director    String    @db.VarChar(100)
+  releaseYear Int       @map("release_year") @db.UnsignedSmallInt
+  durationMin Int       @map("duration_min") @db.UnsignedSmallInt
+  ageRating   AgeRating @map("age_rating")
+  description String?   @db.Text
+  posterUrl   String?   @map("poster_url") @db.VarChar(500)
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  genres    MovieGenre[]
+  showtimes Showtime[]
+  reviews   Review[]
+
+  @@map("movies")
+}
+
+model Genre {
+  id   Int    @id @default(autoincrement())
+  name String @unique @db.VarChar(50)
+
+  movies MovieGenre[]
+
+  @@map("genres")
+}
+
+model MovieGenre {
+  movieId Int @map("movie_id")
+  genreId Int @map("genre_id")
+
+  movie Movie @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  genre Genre @relation(fields: [genreId], references: [id], onDelete: Cascade)
+
+  @@id([movieId, genreId])
+  @@index([genreId])
+  @@map("movie_genres")
+}
+
+model Hall {
+  id         Int    @id @default(autoincrement())
+  name       String @unique @db.VarChar(50)
+  layoutRows Int    @map("layout_rows") @db.UnsignedTinyInt
+  layoutCols Int    @map("layout_cols") @db.UnsignedTinyInt
+
+  seats     Seat[]
+  showtimes Showtime[]
+
+  @@map("halls")
+}
+
+model Seat {
+  id       Int      @id @default(autoincrement())
+  hallId   Int      @map("hall_id")
+  /// Seat label shown to users, e.g. "A1". Numbers skip aisles.
+  label    String   @db.VarChar(5)
+  rowLabel String   @map("row_label") @db.VarChar(2)
+  number   Int      @db.UnsignedTinyInt
+  /// Position on the hall layout grid (0-based). Empty cells are aisles or gaps.
+  gridRow  Int      @map("grid_row") @db.UnsignedTinyInt
+  gridCol  Int      @map("grid_col") @db.UnsignedTinyInt
+  /// Grid cells the seat covers: 1, or 2 for a couple seat.
+  width    Int      @default(1) @db.UnsignedTinyInt
+  type     SeatType @default(standard)
+  isActive Boolean  @default(true) @map("is_active")
+
+  hall         Hall          @relation(fields: [hallId], references: [id], onDelete: Cascade)
+  bookingSeats BookingSeat[]
+
+  @@unique([hallId, label])
+  @@unique([hallId, gridRow, gridCol])
+  @@map("seats")
+}
+
+model Showtime {
+  id            Int            @id @default(autoincrement())
+  movieId       Int            @map("movie_id")
+  hallId        Int            @map("hall_id")
+  startsAt      DateTime       @map("starts_at")
+  endsAt        DateTime       @map("ends_at")
+  priceStandard Int            @map("price_standard") @db.UnsignedInt
+  priceVip      Int            @map("price_vip") @db.UnsignedInt
+  priceCouple   Int            @map("price_couple") @db.UnsignedInt
+  /// Optional fixed price for booking the whole hall. NULL = sum of all seat prices.
+  fullHallPrice Int?           @map("full_hall_price") @db.UnsignedInt
+  status        ShowtimeStatus @default(scheduled)
+
+  movie        Movie         @relation(fields: [movieId], references: [id], onDelete: Restrict)
+  hall         Hall          @relation(fields: [hallId], references: [id], onDelete: Restrict)
+  bookings     Booking[]
+  bookingSeats BookingSeat[]
+
+  @@index([movieId, startsAt])
+  @@index([hallId, startsAt])
+  @@map("showtimes")
+}
+
+model Booking {
+  id          Int           @id @default(autoincrement())
+  bookingCode String        @unique @map("booking_code") @db.VarChar(12)
+  userId      Int           @map("user_id")
+  showtimeId  Int           @map("showtime_id")
+  totalPrice  Int           @map("total_price") @db.UnsignedInt
+  isFullHall  Boolean       @default(false) @map("is_full_hall")
+  status      BookingStatus @default(confirmed)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  cancelledAt DateTime?     @map("cancelled_at")
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  showtime Showtime      @relation(fields: [showtimeId], references: [id], onDelete: Restrict)
+  seats    BookingSeat[]
+
+  @@index([userId, createdAt])
+  @@index([showtimeId])
+  @@map("bookings")
+}
+
+model BookingSeat {
+  id         Int  @id @default(autoincrement())
+  bookingId  Int  @map("booking_id")
+  seatId     Int  @map("seat_id")
+  /// Set while the booking is active; set to NULL on cancel to free the seat.
+  /// UNIQUE(showtime_id, seat_id) blocks double-booking (MySQL allows many NULLs).
+  showtimeId Int? @map("showtime_id")
+  /// Price paid for this seat in MMK.
+  price      Int  @db.UnsignedInt
+
+  booking  Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  seat     Seat      @relation(fields: [seatId], references: [id], onDelete: Restrict)
+  showtime Showtime? @relation(fields: [showtimeId], references: [id], onDelete: Restrict)
+
+  @@unique([showtimeId, seatId])
+  @@index([bookingId])
+  @@index([seatId])
+  @@map("booking_seats")
+}
+
+model Review {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  movieId   Int      @map("movie_id")
+  /// Score from 1 to 10.
+  score     Int      @db.UnsignedTinyInt
+  comment   String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  movie Movie @relation(fields: [movieId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, movieId])
+  @@index([movieId, createdAt])
+  @@map("reviews")
+}
