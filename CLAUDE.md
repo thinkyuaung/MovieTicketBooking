@@ -24,6 +24,7 @@ Run inside `backend/` or `frontend/`:
 - Test: `npm run test`
 - Dev server: `npm run dev` (backend :3000, frontend :5173 proxies `/api` to the backend)
 - Type-check: `npm run typecheck`
+- Tests: npx playwright test; follow .claude/rules/
 - Database (backend only): `npm run db:up` / `db:down`, `npm run migrate`, `npm run seed` (seed deletes all data first), `npm run prisma:generate` after editing the schema without migrating
 - Single test file: `npx vitest run src/domain/booking.test.ts` (add `-t "name"` for one test)
 - Production (backend): `npm run build` then `npm run start` (runs `dist/server.js`); apply migrations with `npm run migrate:deploy`
