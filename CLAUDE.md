@@ -8,11 +8,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Tech stack:** Node.js, TypeScript (ESM)
 
-| Part | Folder | Stack |
-|---|---|---|
-| Backend | `backend/` | Express 5, TypeScript, Prisma 6, zod, JWT (jsonwebtoken + bcryptjs), Vitest + Supertest, run with tsx |
-| Frontend | `frontend/` | React 19, Vite 6, TypeScript, React Router 8 (import from `react-router`), Vitest |
-| Database | `backend/docker-compose.yml` | MySQL 8.4, schema `movieTicket` |
+| Part     | Folder                       | Stack                                                                                                 |
+| -------- | ---------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Backend  | `backend/`                   | Express 5, TypeScript, Prisma 6, zod, JWT (jsonwebtoken + bcryptjs), Vitest + Supertest, run with tsx |
+| Frontend | `frontend/`                  | React 19, Vite 6, TypeScript, React Router 8 (import from `react-router`), Vitest                     |
+| Database | `backend/docker-compose.yml` | MySQL 8.4, schema `movieTicket`                                                                       |
 
 Setup steps and sample logins: `README.md`.
 
@@ -25,13 +25,22 @@ Run inside `backend/` or `frontend/`:
 - Dev server: `npm run dev` (backend :3000, frontend :5173 proxies `/api` to the backend)
 - Type-check: `npm run typecheck`
 - Tests: npx playwright test; follow .claude/rules/
-- Database (backend only): `npm run db:up` / `db:down`, `npm run migrate`, `npm run seed` (seed deletes all data first), `npm run prisma:generate` after editing the schema without migrating
+- Database (backend only): `npm run db:up` / `db:down`, `npm run migrate`, `npm run seed` (seed deletes all data first), `npm run prisma:generate` after editing the schema without migrating, `npm run export [-- table…]` (tables to `backend/exports/*.json`, no password hashes)
 - Single test file: `npx vitest run src/domain/booking.test.ts` (add `-t "name"` for one test)
 - Production (backend): `npm run build` then `npm run start` (runs `dist/server.js`); apply migrations with `npm run migrate:deploy`
 
 ## Environment (backend)
 
 `backend/.env` (copy from `.env.example`), loaded by `src/config.ts` with `process.loadEnvFile()`: `DATABASE_URL`, `JWT_SECRET`, `PORT`, `TEST_DATABASE_URL`. Always read settings through `config`, not `process.env`. `src/db.ts` exports the shared `prisma` client.
+
+## MCP servers
+
+Configured in `.mcp.json`, installed as root dev dependencies (run `npm install` at the root). Check with `/mcp`.
+
+- `playwright`: drive a real browser against the running app (`http://localhost:5173`) to check UI changes or debug e2e failures. Durable checks still belong in `tests/` as Playwright specs.
+- `mysql`: read-only queries (`mysql_query`) as `mcp_readonly` (SELECT only on `movieticket`, `movieticket_e2e`, `movieticket_test`; writes also blocked by the server). Prefix tables with the database, e.g. `movieticket.bookings`.
+- `github`: GitHub's hosted server for `thinkyuaung/MovieTicketBooking`, authenticated with a personal access token.
+- Secrets: `.mcp.json` reads `${MCP_MYSQL_PASSWORD}` and `${GITHUB_TOKEN}` from real environment variables (Windows user variables), not from the `env` block of settings files, which is applied too late. After changing one, restart VS Code completely.
 
 ## Testing (backend)
 
@@ -99,6 +108,7 @@ Public: `GET /api/movies?q=&genre=`, `GET /api/movies/genres`, `GET /api/movies/
 Logged in: `GET /api/auth/me`, `POST /api/bookings` `{showtimeId, seats: ["A1"]}`, `POST /api/showtimes/:id/book-all`, `GET /api/bookings/me`, `GET /api/bookings/:id`, `DELETE /api/bookings/:id` (cancel), `POST /api/movies/:id/reviews` `{score, comment}`.
 
 Admin (role `admin` only):
+
 - `GET /api/admin/dashboard?from=&to=` (range filters showings by start time)
 - Movies: `GET`, `POST /api/admin/movies`, `PATCH`, `DELETE /api/admin/movies/:id`
 - Halls: `GET /api/admin/halls`, `GET /api/admin/halls/:id` (with seats), `POST` `{name, rows}`, `POST /preview` `{rows}` (layout without saving), `PATCH /:id` `{name}`, `PUT /:id/layout` `{rows}`, `PATCH /:id/seats/:seatId` `{isActive?, type?}`, `DELETE /:id`

@@ -14,6 +14,7 @@
     "migrate": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
     "seed": "prisma db seed",
+    "export": "tsx scripts/export-json.ts",
     "prisma:generate": "prisma generate"
   },
   "prisma": {

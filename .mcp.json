@@ -1,0 +1,29 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "node",
+      "args": ["node_modules/@playwright/mcp/cli.js"]
+    },
+    "mysql": {
+      "command": "node",
+      "args": ["node_modules/@benborla29/mcp-server-mysql/dist/index.js"],
+      "env": {
+        "MYSQL_HOST": "127.0.0.1",
+        "MYSQL_PORT": "3306",
+        "MYSQL_USER": "mcp_readonly",
+        "MYSQL_PASS": "${MCP_MYSQL_PASSWORD}",
+        "MYSQL_DB": "",
+        "ALLOW_INSERT_OPERATION": "false",
+        "ALLOW_UPDATE_OPERATION": "false",
+        "ALLOW_DELETE_OPERATION": "false"
+      }
+    },
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": {
+        "Authorization": "Bearer ${GITHUB_TOKEN:-missing}"
+      }
+    }
+  }
+}
