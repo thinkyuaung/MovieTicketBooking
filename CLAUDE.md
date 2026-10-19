@@ -24,11 +24,17 @@ Run inside `backend/` or `frontend/`:
 - Test: `npm run test`
 - Dev server: `npm run dev` (backend :3000, frontend :5173 proxies `/api` to the backend)
 - Type-check: `npm run typecheck`
-- Database (backend only): `npm run db:up`, `npm run migrate`, `npm run seed` (seed deletes all data first)
+- Database (backend only): `npm run db:up` / `db:down`, `npm run migrate`, `npm run seed` (seed deletes all data first), `npm run prisma:generate` after editing the schema without migrating
+- Single test file: `npx vitest run src/domain/booking.test.ts` (add `-t "name"` for one test)
+- Production (backend): `npm run build` then `npm run start` (runs `dist/server.js`); apply migrations with `npm run migrate:deploy`
+
+## Environment (backend)
+
+`backend/.env` (copy from `.env.example`), loaded by `src/config.ts` with `process.loadEnvFile()`: `DATABASE_URL`, `JWT_SECRET`, `PORT`, `TEST_DATABASE_URL`. Always read settings through `config`, not `process.env`. `src/db.ts` exports the shared `prisma` client.
 
 ## Testing (backend)
 
-- Unit tests sit next to the code (`src/**/*.test.ts`). API tests are in `test/api.int.test.ts` and run against a real MySQL.
+- Unit tests sit next to the code (`src/**/*.test.ts`). API tests are in `test/api.int.test.ts` and run against a real MySQL. Test files run one at a time (`fileParallelism: false`) because they share one database.
 - API tests use `TEST_DATABASE_URL` (`movieTicket_test`), never `DATABASE_URL`, and delete all data on every run. Under Vitest, `config.databaseUrl` always returns the test URL. `test/globalSetup.ts` applies migrations and skips the API tests if the test database is unreachable or its name doesn't contain "test".
 - Add an API test for every new endpoint and every business-rule failure (status code and message).
 
@@ -36,19 +42,23 @@ Run inside `backend/` or `frontend/`:
 
 - `backend/src/app.ts`: `createApp()` builds the Express app (used by tests) and the central error handler; `server.ts` starts it.
 - `backend/src/routes/`: thin route modules mounted under `/api`. Request validation with zod lives in `routes/schemas.ts`.
-- `backend/src/services/`: database work with Prisma (`bookingService`, `movieService`, `seatPlanService`, `catalogService` for admin CRUD, `dashboardService`, `reviewService`, `authService`). `showtimeStats.ts` loads seat counts and revenue for many showings in a few grouped queries.
+- `backend/src/services/`: database work with Prisma (`bookingService`, `movieService`, `seatPlanService`, `catalogService` for admin CRUD, `dashboardService`, `reviewService`, `authService`). `showtimeStats.ts` loads seat counts and revenue for many showings in a few grouped queries. `mappers.ts` converts Prisma rows to domain types (`toMovie`, `movieInclude`…).
 - `backend/src/domain/`: pure business logic with tests next to it: `booking.ts` (seat and whole-hall rules), `seatPlan.ts`, `showtime.ts` (end time, overlap), `cinema.ts` (movie view, admin dashboard), `pricing.ts`, `money.ts`, `hallLayout.ts`, `bookingCode.ts`, `movie.ts`.
 - `backend/src/auth/`: bcrypt passwords, JWT tokens, `requireAuth` / `requireAdmin` middleware. The logged-in user is read with `currentUser(res)`.
 - `backend/src/errors.ts`: `AppError` and helpers (`badRequest`, `notFound`, `conflict`…). Throw these; the error handler turns them into `{ error, details? }` JSON.
 - `backend/prisma/schema.prisma`: database schema; `prisma/seed.ts`: sample data.
 - `frontend/src/lib/`: `api.ts` (`api<T>(path, {method, body})` adds the saved login token; errors are `ApiError` with `status` and `details`), `auth.tsx` (`AuthProvider` / `useAuth`), `useApi.ts` (load + `reload`), `dates.ts` (always formats in Asia/Yangon; `toInputValue` / `fromInputValue` for `datetime-local` inputs), `money.ts` (`formatMMK`), `types.ts` (API response shapes; keep in sync with backend services).
 - `frontend/src/components/SeatPlan.tsx`: the cinema seat plan, shared by the customer seat picker, the admin showing view (tooltip shows who booked) and the hall editor. Seats are never `disabled` (browsers send no hover events to disabled buttons); non-clickable seats use `aria-disabled`.
+- `frontend/src/components/common.tsx`: shared UI bits (`Notice`, `LoadState`, `Score`, `AgeBadge`, `Poster`) and the `RequireAuth` route guard (`admin` prop for admin-only).
+- `frontend/src/App.tsx`: all routes: `/`, `/movies/:id`, `/showtimes/:id` (seat picker), `/login`, `/register`, `/bookings`, `/bookings/:id`, `/admin` (dashboard), `/admin/showtimes[/:id]`, `/admin/movies`, `/admin/halls[/:id]`.
 - `frontend/src/pages/`: customer pages; `pages/admin/`: admin pages under `AdminLayout` (admins only). Confirmations are inline buttons, never `confirm()`.
 - `frontend/src/styles.css`: one stylesheet; colours are CSS variables with a dark-mode block. Chart colour `--chart` is separate from the red accent.
+- Root `app.js` and `src/` (`cinema.ts`, `movie.ts`) are leftover starter files, not part of the app. The real code is in `backend/` and `frontend/`; don't edit or import from them.
 
 ## Conventions
 
 - Backend imports use `.js` extensions (NodeNext); frontend imports have no extension (Bundler).
+- From `.claude/rules/`: prefix interfaces with `I` (`IMovie`), give every function a JSDoc comment, use ESM only, and prefer async APIs over sync ones.
 - Keep logic in `domain/` as pure functions and test it there; routes only validate input, call Prisma and domain functions, and shape the response.
 - `backend/src/domain/money.ts` and `frontend/src/lib/money.ts` must produce the same format.
 - Times are stored in UTC. Myanmar Time is UTC+06:30; convert only for display and seed data.
@@ -100,5 +110,5 @@ Admin (role `admin` only):
 2. **User API** ✅ done: movies, seat plan, seat booking, whole-hall booking, cancelling, reviews, auth.
 3. **Admin API** ✅ done: dashboard (revenue in MMK, how full each showing is, whole-hall bookings, low reviews), movie/hall/seat/showtime management, bookings per showing, review removal.
 4. **Frontend** ✅ done: movie list (search, genre), movie detail (showtimes by day, reviews), seat picker (live refresh, whole-hall option), ticket page, my bookings, login/register, admin dashboard, showtimes, movies, halls with layout editor and seat switch-off.
-5. **Tests:** frontend tests. (Backend API tests for booking conflicts, same-seat race, whole-hall rule, MMK totals and admin protection are already in `test/api.int.test.ts`.)
+5. **Tests:** frontend tests (only `src/lib/money.test.ts` exists so far). (Backend API tests for booking conflicts, same-seat race, whole-hall rule, MMK totals and admin protection are already in `test/api.int.test.ts`.)
 6. **Finish:** rate limiting on login, production settings (strong `JWT_SECRET`, non-root DB user), README polish.
